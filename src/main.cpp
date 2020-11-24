@@ -383,7 +383,7 @@ int handler(void* user, const char* section, const char* name, const char* value
     }
     else if (MATCH("wtp", "aliens_fight_half_strength_unit_turn"))
     {
-        cf->aliens_fight_half_strength_unit_turn = max(1, (atoi(value));
+        cf->aliens_fight_half_strength_unit_turn = max(1, atoi(value));
     }
     else if (MATCH("wtp", "ai_useWTPAlgorithms"))
     {
