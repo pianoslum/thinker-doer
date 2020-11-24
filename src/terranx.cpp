@@ -213,3 +213,6 @@ fp_2void *tx_act_of_aggression = (fp_2void *)0x0050C2E0;
 // act of aggression
 fp_2void *tx_tech_research = (fp_2void *)0x005BE940;
 
+// checks if base is a port
+fp_2int *tx_is_port = (fp_2int *)0x00579A00;
+

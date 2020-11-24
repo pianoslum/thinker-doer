@@ -186,6 +186,7 @@ struct Config {
     bool compact_effect_icons = false;
     int se_research_bonus_percentage = 10;
     bool remove_fungal_tower_defense_bonus = false;
+    bool aliens_fight_half_strength_unit_turn = 15;
     bool ai_useWTPAlgorithms;
     double ai_production_vanilla_priority_unit;
     double ai_production_vanilla_priority_project;
@@ -194,6 +195,7 @@ struct Config {
     double ai_production_threat_coefficient_truce;
     double ai_production_threat_coefficient_treaty;
     double ai_production_threat_coefficient_pact;
+    double ai_production_threat_coefficient_human;
     double ai_production_min_native_protection;
     double ai_production_max_native_protection;
     double ai_production_native_protection_priority;
@@ -208,6 +210,10 @@ struct Config {
     double ai_production_improvement_coverage;
     int ai_production_population_projection_turns;
     double ai_production_Thinker_proportion;
+    double ai_production_vehicle_threat_power;
+    double ai_production_vehicle_threat_turns;
+    double ai_production_protection_mix_attackers;
+    double ai_production_protection_mix_defenders;
     double ai_terraforming_nutrientWeight;
     double ai_terraforming_mineralWeight;
 	double ai_terraforming_energyWeight;

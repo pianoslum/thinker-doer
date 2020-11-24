@@ -1,17 +1,304 @@
 #include <map>
 #include "aiProduction.h"
+#include "ai.h"
 #include "engine.h"
 #include "game.h"
 
-std::set<int> bestProductionBaseIds;
-std::map<int, std::map<int, double>> unitDemands;
-std::map<int, PRODUCTION_DEMAND> productionDemands;
-double averageFacilityMoraleBoost;
-double territoryBonusMultiplier;
+double averageFacilityMoraleBoosts[3];
+FACTION_INFO factionInfos[8];
+std::unordered_map<int, std::unordered_map<int, double>> militaryDemands;
 
 // currently processing base production demand
 
 PRODUCTION_DEMAND productionDemand;
+
+void aiProductionStrategy()
+{
+	// populate production lists
+
+	populateProductionLists();
+
+}
+
+void populateProductionLists()
+{
+	// clear lists
+
+	militaryDemands.clear();
+
+	// populate averageFacilityMoraleBoost;
+
+	int moraleBoostCounts[3] = {0, 0, 0};
+	int moraleBoostSums[3] = {0, 0, 0};
+
+	int seMorale = tx_factions[*active_faction].SE_morale_pending;
+	int moraleFacilityBonus = (seMorale <= -2 ? 1 : 2);
+
+	for (int baseId : baseIds)
+	{
+		BASE *base = &(tx_bases[baseId]);
+
+		// land
+
+		moraleBoostCounts[TRIAD_LAND] += base->mineral_surplus;
+
+		if (has_facility(baseId, FAC_COMMAND_CENTER))
+		{
+			moraleBoostSums[TRIAD_LAND] += base->mineral_surplus * moraleFacilityBonus;
+		}
+
+		if (has_facility(baseId, FAC_BIOENHANCEMENT_CENTER))
+		{
+			moraleBoostSums[TRIAD_LAND] += base->mineral_surplus * moraleFacilityBonus;
+		}
+
+		// sea
+
+		if (isPort(baseId))
+		{
+			moraleBoostCounts[TRIAD_SEA] += base->mineral_surplus;
+
+			if (has_facility(baseId, FAC_NAVAL_YARD))
+			{
+				moraleBoostSums[TRIAD_SEA] += base->mineral_surplus * moraleFacilityBonus;
+			}
+
+			if (has_facility(baseId, FAC_BIOENHANCEMENT_CENTER))
+			{
+				moraleBoostSums[TRIAD_SEA] += base->mineral_surplus * moraleFacilityBonus;
+			}
+
+		}
+
+		// air
+
+		moraleBoostCounts[TRIAD_AIR] += base->mineral_surplus;
+
+		if (has_facility(baseId, FAC_AEROSPACE_COMPLEX))
+		{
+			moraleBoostSums[TRIAD_AIR] += base->mineral_surplus * moraleFacilityBonus;
+		}
+
+		if (has_facility(baseId, FAC_BIOENHANCEMENT_CENTER))
+		{
+			moraleBoostSums[TRIAD_AIR] += base->mineral_surplus * moraleFacilityBonus;
+		}
+
+	}
+
+	for (int triad = TRIAD_LAND; triad <= TRIAD_AIR; triad++)
+	{
+		averageFacilityMoraleBoosts[triad] = (moraleBoostCounts[triad] > 0 ? (double)moraleBoostSums[triad] / (double)moraleBoostCounts[triad] : 0.0);
+	}
+
+	// populate factions combat modifiers
+
+	debug("%-24s\nfactionCombatModifiers:\n", tx_metafactions[aiFactionId].noun_faction);
+
+	for (int id = 1; id < 8; id++)
+	{
+		// store combat modifiers
+
+		factionInfos[id].offenseMultiplier = getFactionOffenseMultiplier(id);
+		factionInfos[id].defenseMultiplier = getFactionDefenseMultiplier(id);
+		factionInfos[id].fanaticBonusMultiplier = getFactionFanaticBonusMultiplier(id);
+
+		debug
+		(
+			"\t%-24s: offenseMultiplier=%4.2f, defenseMultiplier=%4.2f, fanaticBonusMultiplier=%4.2f\n",
+			tx_metafactions[id].noun_faction,
+			factionInfos[id].offenseMultiplier,
+			factionInfos[id].defenseMultiplier,
+			factionInfos[id].fanaticBonusMultiplier
+		);
+
+	}
+
+	debug("\n");
+
+	// populate other factions threat koefficients
+
+	debug("%-24s\notherFactionThreatKoefficients:\n", tx_metafactions[aiFactionId].noun_faction);
+
+	for (int id = 1; id < 8; id++)
+	{
+		// skip self
+
+		if (id == aiFactionId)
+			continue;
+
+		// get relation from other faction
+
+		int otherFactionRelation = tx_factions[id].diplo_status[aiFactionId];
+
+		// calculate threat koefficient
+
+		double threatKoefficient;
+
+		if (otherFactionRelation & DIPLO_VENDETTA)
+		{
+			threatKoefficient = conf.ai_production_threat_coefficient_vendetta;
+		}
+		else if (otherFactionRelation & DIPLO_TRUCE)
+		{
+			threatKoefficient = conf.ai_production_threat_coefficient_truce;
+		}
+		else if (otherFactionRelation & DIPLO_TREATY)
+		{
+			threatKoefficient = conf.ai_production_threat_coefficient_treaty;
+		}
+		else if (otherFactionRelation & DIPLO_PACT)
+		{
+			threatKoefficient = conf.ai_production_threat_coefficient_pact;
+		}
+		else
+		{
+			threatKoefficient = conf.ai_production_threat_coefficient_truce;
+		}
+
+		// add extra for treacherous human player
+
+		if (is_human(id))
+		{
+			threatKoefficient += conf.ai_production_threat_coefficient_human;
+		}
+
+		// store threat koefficient
+
+		factionInfos[id].threatKoefficient = threatKoefficient;
+
+		debug("\t%-24s: %08x => %4.2f\n", tx_metafactions[id].noun_faction, otherFactionRelation, threatKoefficient);
+
+	}
+
+	debug("\n");
+
+	// popualte military demands
+
+	for (int vehicleId = 0; vehicleId < *total_num_vehicles; vehicleId++)
+	{
+		VEH *vehicle = &(tx_vehicles[vehicleId]);
+		UNIT *unit = &(tx_units[vehicle->proto_id]);
+		int vehicleFactionId = vehicle->faction_id;
+		int triad = veh_triad(vehicleId);
+		int vehicleWeaponOffenseValue = tx_weapon[tx_units[vehicle->proto_id].weapon_type].offense_value;
+		MAP *vehicleMapTile = getVehicleMapTile(vehicleId);
+		int vehicleRegion = vehicleMapTile->region;
+
+		// skip own
+
+		if (vehicleFactionId == *active_faction)
+			continue;
+
+		// skip not combat
+
+		if (vehicleWeaponOffenseValue == 0)
+			continue;
+
+		// skip not air and not in presence region
+
+		if (triad != TRIAD_AIR && presenceRegions.find(vehicleRegion) == presenceRegions.end())
+			continue;
+
+		// find best attacker against this vehicle
+
+		int attackerPrototype;
+		int attackOdds;
+		findAttacker(vehicleId, &attackerPrototype, &attackOdds);
+
+		// calculate vehicle threat
+
+		double threat = factionInfos[vehicleFactionId].threatKoefficient * getVehicleConventionalThreat(vehicleId);
+
+		if (vehicleWeaponOffenseValue > 0)
+		{
+			threat = getVehicleConventionalThreat(vehicleId);
+		}
+		else if (vehicleWeaponOffenseValue < 0)
+		{
+			threat = getVehiclePsiThreat(vehicleId);
+		}
+
+		// calculate demand based on faction threat koefficient
+
+		double demand = threat * factionInfos[vehicleFactionId].threatKoefficient;
+
+			// update threat types
+
+			if (triad == TRIAD_LAND)
+			{
+				threats[vehicleRegion][THREAT_PSI_LAND] += psiThreat;
+			}
+			else if (triad == TRIAD_SEA)
+			{
+				threats[vehicleRegion][THREAT_PSI_SEA] += psiThreat;
+			}
+			else if (triad == TRIAD_AIR)
+			{
+				threats[vehicleRegion][THREAT_PSI_AIR] += psiThreat;
+			}
+
+		}
+
+		if (vehicleWeaponOffenseValue > 0)
+		{
+			// calculate vehicle conventional threat
+
+			double conventionalThreat = factionInfos[vehicleFactionId].threatKoefficient * getVehicleConventionalThreat(vehicleId);
+
+			// update threat types
+
+			if (unit->chassis_type == CHS_INFANTRY)
+			{
+				if (vehicle_has_ability(vehicleId, ABL_COMM_JAMMER))
+				{
+					threats[vehicleRegion][THREAT_INFANTRY_ECM] += conventionalThreat;
+				}
+				else
+				{
+					threats[vehicleRegion][THREAT_INFANTRY] += conventionalThreat;
+				}
+			}
+			else if (unit->chassis_type == CHS_SPEEDER || unit->chassis_type == CHS_HOVERTANK)
+			{
+				threats[vehicleRegion][THREAT_MOBILE] += conventionalThreat;
+			}
+			else if (unit->chassis_type == CHS_FOIL || unit->chassis_type == CHS_CRUISER)
+			{
+				threats[vehicleRegion][THREAT_SHIP] += conventionalThreat;
+			}
+			else if (triad == TRIAD_AIR)
+			{
+				threats[vehicleRegion][THREAT_AIR] += conventionalThreat;
+			}
+
+		}
+		else if (vehicleWeaponOffenseValue < 0)
+		{
+			// calculate vehicle psi threat
+
+			double psiThreat = factionInfos[vehicleFactionId].threatKoefficient * getVehiclePsiThreat(vehicleId);
+
+			// update threat types
+
+			if (triad == TRIAD_LAND)
+			{
+				threats[vehicleRegion][THREAT_PSI_LAND] += psiThreat;
+			}
+			else if (triad == TRIAD_SEA)
+			{
+				threats[vehicleRegion][THREAT_PSI_SEA] += psiThreat;
+			}
+			else if (triad == TRIAD_AIR)
+			{
+				threats[vehicleRegion][THREAT_PSI_AIR] += psiThreat;
+			}
+
+		}
+
+	}
+
+}
 
 /*
 Selects base production.
@@ -137,8 +424,8 @@ int aiSuggestBaseProduction(int baseId, int choice)
 
 	evaluateNativeProtectionDemand();
 
-//	evaluateFactionProtectionDemand();
-//
+	evaluateFactionConventionalProtectionDemand();
+
 	// calculate vanilla priority
 
 	double vanillaPriority = 0.0;
@@ -1139,14 +1426,14 @@ void evaluateNativeProtectionDemand()
 
 }
 
-///*
-//Calculate demand for protection against other factions.
-//*/
-//void evaluateFactionProtectionDemand()
-//{
-//	debug("%-24s evaluateFactionProtectionDemand\n", tx_metafactions[aiFactionId].noun_faction);
+/*
+Calculate demand for protection against other factions.
+*/
+void evaluateFactionConventionalProtectionDemand()
+{
+//	debug("%-24s evaluateFactionConventionalProtectionDemand\n", tx_metafactions[aiFactionId].noun_faction);
 //
-//	// hostile conventional offense
+//	// calculate conventional offense
 //
 //	debug("\tconventional offense\n");
 //
@@ -1412,8 +1699,8 @@ void evaluateNativeProtectionDemand()
 //
 //	debug("\n");
 //
-//}
-//
+}
+
 void addProductionDemand(int item, double priority)
 {
 	BASE *base = productionDemand.base;
@@ -1981,6 +2268,122 @@ int getNearestFactionBaseRange(int factionId, int x, int y)
 	}
 
 	return nearestFactionBaseRange;
+
+}
+
+double getVehicleConventionalThreat(int vehicleId)
+{
+	VEH *vehicle = &(tx_vehicles[vehicleId]);
+	int vehicleTriad = veh_triad(vehicleId);
+	int vehicleWeaponOffenseValue = tx_weapon[tx_units[vehicle->proto_id].weapon_type].offense_value;
+	MAP *vehicleMapTile = getVehicleMapTile(vehicleId);
+
+	// conventional combat vehicles only
+
+	if (vehicleWeaponOffenseValue <= 0)
+		return 0.0;
+
+	// calculate vehicle basic threat
+
+	double vehicleThreat = (double)vehicleWeaponOffenseValue * getMoraleCombatValueMultiplier(vehicle->morale);
+
+	// get nearest own base range
+
+	int nearestOwnBaseRange = getNearestOwnBaseRange((vehicleTriad == TRIAD_AIR ? -1 : vehicleMapTile->region), vehicle->x, vehicle->y);
+
+	// get vehicle speed
+
+	double vehicleSpeed = (vehicleTriad == TRIAD_LAND ? getLandVehicleSpeedOnRoads(vehicleId) : getVehicleSpeedWithoutRoads(vehicleId));
+
+	// get time to reach nearest own base range
+
+	double ownBaseReachTurns = (double)nearestOwnBaseRange / vehicleSpeed;
+
+	// adjust vechicle threat to nearest own base range
+
+	vehicleThreat *= conf.ai_production_vehicle_threat_turns / max(conf.ai_production_vehicle_threat_turns, ownBaseReachTurns);
+
+	// return value
+
+	return vehicleThreat;
+
+}
+
+double getVehiclePsiThreat(int vehicleId)
+{
+	VEH *vehicle = &(tx_vehicles[vehicleId]);
+	int vehicleTriad = veh_triad(vehicleId);
+	int vehicleWeaponOffenseValue = tx_weapon[tx_units[vehicle->proto_id].weapon_type].offense_value;
+	MAP *vehicleMapTile = getVehicleMapTile(vehicleId);
+
+	// psi combat vehicles only
+
+	if (vehicleWeaponOffenseValue >= 0)
+		return 0.0;
+
+	// calculate vehicle basic threat
+
+	double vehicleThreat = getMoraleCombatValueMultiplier(vehicle->morale);
+
+	// get nearest own base range
+
+	int nearestOwnBaseRange = getNearestOwnBaseRange((vehicleTriad == TRIAD_AIR ? -1 : vehicleMapTile->region), vehicle->x, vehicle->y);
+
+	// get vehicle speed
+
+	double vehicleSpeed = (vehicleTriad == TRIAD_LAND ? getLandVehicleSpeedOnRoads(vehicleId) : getVehicleSpeedWithoutRoads(vehicleId));
+
+	// get time to reach nearest own base range
+
+	double ownBaseReachTurns = (double)nearestOwnBaseRange / vehicleSpeed;
+
+	// adjust vechicle threat to nearest own base range
+
+	vehicleThreat *= conf.ai_production_vehicle_threat_turns / max(conf.ai_production_vehicle_threat_turns, ownBaseReachTurns);
+
+	// return value
+
+	return vehicleThreat;
+
+}
+
+/*
+Finds attacker prototype against given vehicle.
+*/
+void findAttacker(int defendingVehicleId, int *prototypeIdPointer, double *demand)
+{
+	prototypeIdPointer = NULL;
+
+	VEH defendingVehicle = &(tx_vehicles[defendingVehicleId]);
+	int defendingUnitId = defendingVehicle->proto_id;
+
+	for (int attackingUnitId : prototypes)
+	{
+		UNIT *attackingUnit = &(tx_units[attackingUnitId]);
+		int attackingUnitWeaponOffenseValue = tx_weapon[attackingUnit->weapon_type].offense_value;
+
+		// skip non combat
+
+		if (attackingUnitWeaponOffenseValue == 0)
+			continue;
+
+		// skip artillery
+
+		if (unit_has_ability(attackingUnitId, ABL_ARTILLERY))
+			continue;
+
+		// skip incapable of direct attacking
+
+		if (!isUnitCanAttackDirectly(attackingUnitId, defendingUnitId))
+			continue;
+
+		// get unit attack odds
+
+		double attackOdds = getUnitAttackOdds(attackingUnitId, defendingUnitId);
+
+		// adjust for
+
+	}
 
 }
 

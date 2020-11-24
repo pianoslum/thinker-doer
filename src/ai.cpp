@@ -22,9 +22,10 @@ int wtpAIFactionId = -1;
 
 int aiFactionId;
 
-FACTION_INFO factionInfos[8];
 std::vector<int> baseIds;
-std::unordered_map<MAP *, int> baseLocations;
+std::set<int> presenceRegions;
+std::vector<MAP_INFO> baseLocations;
+std::unordered_map<MAP *, int> mapBases;
 std::map<int, std::vector<int>> regionBaseGroups;
 std::map<int, BASE_STRATEGY> baseStrategies;
 std::vector<int> combatVehicleIds;
@@ -58,6 +59,10 @@ void aiStrategy(int id)
 
 	populateSharedLists();
 
+	// prepare production
+
+	aiProductionStrategy();
+
 	// prepare former orders
 
 	aiTerraformingStrategy();
@@ -73,7 +78,9 @@ void populateSharedLists()
 	// clear lists
 
 	baseIds.clear();
+	presenceRegions.clear();
 	baseLocations.clear();
+	mapBases.clear();
 	regionBaseGroups.clear();
 	baseStrategies.clear();
 	combatVehicleIds.clear();
@@ -81,88 +88,6 @@ void populateSharedLists()
 	prototypes.clear();
 	colonyVehicleIds.clear();
 	formerVehicleIds.clear();
-
-	// populate factions combat modifiers
-
-	debug("%-24s\nfactionCombatModifiers:\n", tx_metafactions[aiFactionId].noun_faction);
-
-	for (int id = 1; id < 8; id++)
-	{
-		// store combat modifiers
-
-		factionInfos[id].offenseMultiplier = getFactionOffenseMultiplier(id);
-		factionInfos[id].defenseMultiplier = getFactionDefenseMultiplier(id);
-		factionInfos[id].fanaticBonusMultiplier = getFactionFanaticBonusMultiplier(id);
-
-		debug
-		(
-			"\t%-24s: offenseMultiplier=%4.2f, defenseMultiplier=%4.2f, fanaticBonusMultiplier=%4.2f\n",
-			tx_metafactions[id].noun_faction,
-			factionInfos[id].offenseMultiplier,
-			factionInfos[id].defenseMultiplier,
-			factionInfos[id].fanaticBonusMultiplier
-		);
-
-	}
-
-	debug("\n");
-
-	// populate other factions threat koefficients
-
-	debug("%-24s\notherFactionThreatKoefficients:\n", tx_metafactions[aiFactionId].noun_faction);
-
-	for (int id = 1; id < 8; id++)
-	{
-		// skip self
-
-		if (id == aiFactionId)
-			continue;
-
-		// get relation from other faction
-
-		int otherFactionRelation = tx_factions[id].diplo_status[aiFactionId];
-
-		// calculate threat koefficient
-
-		double threatKoefficient;
-
-		if (otherFactionRelation & DIPLO_VENDETTA)
-		{
-			threatKoefficient = conf.ai_production_threat_coefficient_vendetta;
-		}
-		else if (otherFactionRelation & DIPLO_TRUCE)
-		{
-			threatKoefficient = conf.ai_production_threat_coefficient_truce;
-		}
-		else if (otherFactionRelation & DIPLO_TREATY)
-		{
-			threatKoefficient = conf.ai_production_threat_coefficient_treaty;
-		}
-		else if (otherFactionRelation & DIPLO_PACT)
-		{
-			threatKoefficient = conf.ai_production_threat_coefficient_pact;
-		}
-		else
-		{
-			threatKoefficient = conf.ai_production_threat_coefficient_truce;
-		}
-
-		// add extra for treacherous human player
-
-		if (is_human(id))
-		{
-			threatKoefficient += 0.50;
-		}
-
-		// store threat koefficient
-
-		factionInfos[id].threatKoefficient = threatKoefficient;
-
-		debug("\t%-24s: %08x => %4.2f\n", tx_metafactions[id].noun_faction, otherFactionRelation, threatKoefficient);
-
-	}
-
-	debug("\n");
 
 	// populate bases
 
@@ -183,8 +108,10 @@ void populateSharedLists()
 
 		// add base location
 
-		MAP *baseLocation = getMapTile(base->x, base->y);
-		baseLocations[baseLocation] = id;
+		MAP *baseMapTile = getBaseMapTile(id);
+		presenceRegions.insert(baseMapTile->region);
+		baseLocations.push_back({base->x, base->y, baseMapTile});
+		mapBases[baseMapTile] = id;
 
 		// add base strategy
 
@@ -238,9 +165,9 @@ void populateSharedLists()
 			// find if vehicle is at base
 
 			MAP *vehicleLocation = getMapTile(vehicle->x, vehicle->y);
-			std::unordered_map<MAP *, int>::iterator baseLocationsIterator = baseLocations.find(vehicleLocation);
+			std::unordered_map<MAP *, int>::iterator mapBasesIterator = mapBases.find(vehicleLocation);
 
-			if (baseLocationsIterator == baseLocations.end())
+			if (mapBasesIterator == mapBases.end())
 			{
 				// add outside vehicle
 
@@ -249,7 +176,7 @@ void populateSharedLists()
 			}
 			else
 			{
-				BASE_STRATEGY *baseStrategy = &(baseStrategies[baseLocationsIterator->second]);
+				BASE_STRATEGY *baseStrategy = &(baseStrategies[mapBasesIterator->second]);
 
 				// add to garrison
 
@@ -338,6 +265,36 @@ bool isreachable(int id, int x, int y)
 	MAP *destinationLocation = getMapTile(x, y);
 
 	return (triad == TRIAD_AIR || getConnectedRegion(vehicleLocation->region) == getConnectedRegion(destinationLocation->region));
+
+}
+
+int getNearestOwnBaseRange(int region, int x, int y)
+{
+	// iterate over own bases
+
+	int nearestOwnBaseRange = 9999;
+
+	for (int baseId : baseIds)
+	{
+		BASE *base = &(tx_bases[baseId]);
+		MAP *baseMapTile = getBaseMapTile(baseId);
+
+		// matching region only
+
+		if (region != -1 && baseMapTile->region != region)
+			continue;
+
+		// get range
+
+		int range = map_range(x, y, base->x, base->y);
+
+		// update best value
+
+		nearestOwnBaseRange = min(nearestOwnBaseRange, range);
+
+	}
+
+	return nearestOwnBaseRange;
 
 }
 

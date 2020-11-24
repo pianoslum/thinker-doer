@@ -3911,7 +3911,7 @@ bool isTowardBaseDiagonal(int x, int y, int dxSign, int dySign)
 
 			// check base in tile
 
-			if (baseLocations.count(tile) != 0)
+			if (mapBases.count(tile) != 0)
 			{
 				return true;
 			}
@@ -3946,7 +3946,7 @@ bool isTowardBaseHorizontal(int x, int y, int dxSign)
 
 			// check base in tile
 
-			if (baseLocations.count(tile) != 0)
+			if (mapBases.count(tile) != 0)
 			{
 				return true;
 			}
@@ -3981,7 +3981,7 @@ bool isTowardBaseVertical(int x, int y, int dySign)
 
 			// check base in tile
 
-			if (baseLocations.count(tile) != 0)
+			if (mapBases.count(tile) != 0)
 			{
 				return true;
 			}
@@ -4935,7 +4935,7 @@ void findPathStep(int id, int x, int y, MAP_INFO *step)
 
 				// exclude zoc to zoc movement
 
-				if (baseLocations.count(element->tile) == 0 && baseLocations.count(adjacentTile) == 0 && element->zoc && adjacentTileZOC)
+				if (mapBases.count(element->tile) == 0 && mapBases.count(adjacentTile) == 0 && element->zoc && adjacentTileZOC)
 					continue;
 
 				// calculate movement cost

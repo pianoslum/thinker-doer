@@ -3128,12 +3128,10 @@ void patch_compact_effect_icons()
 
 	// sprite display position shifts before and after
 
-	int originalWidth = 26;
 	int shiftBefore = -2;
 	int shiftAfter = -4;
 	int shiftInitial = -3;
 	int shiftCombined = shiftBefore + shiftAfter;
-	int modifiedWidth = originalWidth + shiftCombined;
 
 	// modify effect sprite width for the purpose total diplayed width
 
@@ -3299,6 +3297,30 @@ void patch_remove_fungal_tower_defense_bonus()
 		disable_fungal_tower_defense_bonus_bytes_length,
 		disable_fungal_tower_defense_bonus_bytes_old,
 		disable_fungal_tower_defense_bonus_bytes_new
+	);
+
+}
+
+/*
+aliens fight at half strength until this turn.
+*/
+void patch_aliens_fight_half_strength_unit_turn(int turn)
+{
+	int aliens_fight_half_strength_unit_turn_bytes_length = 0x7;
+/*
+0:  83 3d d4 64 9a 00 0f    cmp    DWORD PTR ds:0x9a64d4,0xf
+*/
+	byte aliens_fight_half_strength_unit_turn_bytes_old[] = { 0x83, 0x3D, 0xD4, 0x64, 0x9A, 0x00, 0x0F };
+/*
+0:  83 3d d4 64 9a 00 01    cmp    DWORD PTR ds:0x9a64d4,<turn>
+*/
+	byte aliens_fight_half_strength_unit_turn_bytes_new[] = { 0x83, 0x3D, 0xD4, 0x64, 0x9A, 0x00, (byte)turn };
+	write_bytes
+	(
+		0x00507C22,
+		aliens_fight_half_strength_unit_turn_bytes_length,
+		aliens_fight_half_strength_unit_turn_bytes_old,
+		aliens_fight_half_strength_unit_turn_bytes_new
 	);
 
 }
@@ -3882,6 +3904,11 @@ bool patch_setup(Config* cf) {
 	if (cf->remove_fungal_tower_defense_bonus)
 	{
 		patch_remove_fungal_tower_defense_bonus();
+	}
+
+	if (cf->aliens_fight_half_strength_unit_turn != 15)
+	{
+		patch_aliens_fight_half_strength_unit_turn(cf->aliens_fight_half_strength_unit_turn);
 	}
 
 

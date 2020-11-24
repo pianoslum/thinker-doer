@@ -1488,13 +1488,13 @@ Returns base tile ocean regions it can issue ships to.
 std::set<int> getBaseConnectedOceanRegions(int baseId)
 {
 	BASE *base = &(tx_bases[baseId]);
-	MAP *baseLocations = getBaseMapTile(baseId);
+	MAP *mapBases = getBaseMapTile(baseId);
 
 	std::set<int> baseConnectedOceanRegions;
 
-	if (is_ocean(baseLocations))
+	if (is_ocean(mapBases))
 	{
-		baseConnectedOceanRegions.insert(baseLocations->region);
+		baseConnectedOceanRegions.insert(mapBases->region);
 	}
 	else
 	{
@@ -2870,5 +2870,130 @@ bool isInRangeOfFriendlySensor(int x, int y, int range, int factionId)
 
 	return sensor;
 
+}
+
+double getMoraleCombatValueMultiplier(int morale)
+{
+	return 1.0 + 0.125 * (morale - 2);
+}
+
+/*
+Calculates basic attack odds for units.
+*/
+double getUnitAttackOdds(attackingUnitId, defendingUnitId)
+{
+	UNIT *attackingUnit = &(tx_units[attackingUnitId]);
+	UNIT *defendingUnit = &(tx_units[defendingUnitId]);
+
+	R_Chassis *attackingUnitChassis = &(tx_chassis[attackingUnit->chassis_type]);
+	R_Chassis *defendingUnitChassis = &(tx_chassis[defendingUnit->chassis_type]);
+
+	int attackingUnitTriad = unit_triad(attackingUnitId);
+	int defendingUnitTriad = unit_triad(defendingUnitId);
+
+	int attackingUnitWeaponOffenseValue = tx_weapon[attackingUnit->weapon_type].offense_value;
+	int defendingUnitArmorDefenseValue = tx_defense[defendingUnit->armor_type].defense_value;
+
+	double attackOdds;
+
+	if (attackingUnitWeaponOffenseValue < 0 || defendingUnitArmorDefenseValue < 0)
+	{
+		// get psi base odds
+
+		attackOdds = getPsiCombatBaseOdds(unit_triad(defendingUnitId));
+
+		// Empath Song
+
+		if (unit_has_ability(attackingUnitId, ABL_EMPATH))
+		{
+			attackOdds *= 1.5;
+		}
+
+		// Hypnotic Trance
+
+		if (unit_has_ability(defendingUnitId, ABL_TRANCE))
+		{
+			attackOdds /= 1.5;
+		}
+
+	}
+	else
+	{
+		// get base odds
+
+		attackOdds = (double)attackingUnitWeaponOffenseValue / (double)defendingUnitArmorDefenseValue;
+
+		// Air Superiority
+
+		if (attackingUnitTriad == TRIAD_AIR && defendingUnitTriad == TRIAD_AIR && unit_has_ability(attackingUnitId, ABL_AIR_SUPERIORITY))
+		{
+			attackOdds *= (1.0 + (double)tx_basic->combat_bonus_air_supr_vs_air / 100.0);
+		}
+
+		if (attackingUnitTriad == TRIAD_AIR && defendingUnitTriad != TRIAD_AIR && unit_has_ability(attackingUnitId, ABL_AIR_SUPERIORITY))
+		{
+			attackOdds *= (1.0 - (double)tx_basic->combat_penalty_air_supr_vs_ground / 100.0);
+		}
+
+		// Comm Jammer
+
+		if (attackingUnitTriad == TRIAD_LAND && defendingUnitTriad == TRIAD_LAND && attackingUnitChassis->speed >= 2 && unit_has_ability(defendingUnitId, ABL_COMM_JAMMER))
+		{
+			attackOdds /= (1.0 + (double)tx_basic->combat_comm_jammer_vs_mobile / 100.0);
+		}
+
+		// Soporific Gas Pods
+
+		if (unit_has_ability(attackingUnitId, ABL_SOPORIFIC_GAS))
+		{
+			attackOdds /= (1.0 - 0.25);
+		}
+
+	}
+
+}
+
+bool isUnitCanAttackDirectly(int attackingUnitId, int defendingUnitId)
+{
+	UNIT *attackingUnit = &(tx_units[attackingUnitId]);
+	UNIT *defendingUnit = &(tx_units[defendingUnitId]);
+
+	R_Chassis *defendingUnitChassis = &(tx_chassis[defendingUnit->chassis_type]);
+
+	int attackingUnitTriad = unit_triad(attackingUnitId);
+	int defendingUnitTriad = unit_triad(defendingUnitId);
+
+	// land artillery cannot attack directly
+
+	if (attackingUnitTriad == TRIAD_LAND && unit_has_ability(attackingUnitId, ABL_ARTILLERY))
+		return false;
+
+	// land unit cannot attack sea unit
+
+	if (attackingUnitTriad == TRIAD_LAND && defendingUnitTriad == TRIAD_SEA)
+		return false;
+
+	// sea unit cannot attack land unit
+
+	if (attackingUnitTriad == TRIAD_SEA && defendingUnitTriad == TRIAD_LAND)
+		return false;
+
+	// land unit cannot attack air unit without Air Superiority
+
+	if (attackingUnitTriad == TRIAD_LAND && defendingUnitChassis->triad == TRIAD_AIR && defendingUnitChassis->range >= 2 && !unit_has_ability(attackingUnitId, ABL_AIR_SUPERIORITY))
+		return false;
+
+	// sea unit cannot attack air unit without Air Superiority
+
+	if (attackingUnitTriad == TRIAD_SEA && defendingUnitChassis->triad == TRIAD_AIR && defendingUnitChassis->range >= 2 && !unit_has_ability(attackingUnitId, ABL_AIR_SUPERIORITY))
+		return false;
+
+	return true;
+
+}
+
+bool isPort(int baseId)
+{
+	return (tx_is_port(baseId, 0));
 }
 

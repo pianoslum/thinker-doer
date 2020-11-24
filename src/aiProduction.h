@@ -57,6 +57,8 @@ const int WTP_MANAGED_UNIT_PLANS[] =
     PLAN_TERRAFORMING,
 };
 
+void aiProductionStrategy();
+void populateProductionLists();
 HOOK_API int suggestBaseProduction(int baseId, int a2, int a3, int a4);
 int aiSuggestBaseProduction(int baseId, int choice);
 void evaluateFacilitiesDemand();
@@ -69,7 +71,7 @@ void evaluateOceanExpansionDemand();
 void evaluateExplorationDemand();
 void evaluatePoliceDemand();
 void evaluateNativeProtectionDemand();
-void evaluateFactionProtectionDemand();
+void evaluateFactionConventionalProtectionDemand();
 void addProductionDemand(int item, double priority);
 int selectBestNativeDefensePrototype(int factionId);
 int findStrongestNativeDefensePrototype(int factionId);
@@ -90,5 +92,7 @@ bool isBaseNeedPsych(int baseId);
 int findPoliceUnit(int factionId);
 HOOK_API void modifiedBaseFirst(int baseId);
 int getNearestFactionBaseRange(int factionId, int x, int y);
+double getVehicleConventionalThreat(int vehicleId);
+double getVehiclePsiThreat(int vehicleId);
 
 #endif // __AIPRODUCTION_H__

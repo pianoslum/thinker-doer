@@ -173,6 +173,7 @@ bool isInRangeOfFriendlySensor(int x, int y, int range, int factionId);
 HOOK_API void modifiedBattleFight2(int attackerVehicleId, int angle, int tx, int ty, int do_arty, int flag1, int flag2);
 HOOK_API int modifiedSocialWinDrawSocialCalculateSpriteOffset(int spriteIndex, int effectValue);
 HOOK_API void modifiedTechResearch(int factionId, int labs);
+int getNearestOwnBaseRange(int region, int x, int y);
 
 #endif // __WTP_H__
 

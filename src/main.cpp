@@ -381,6 +381,10 @@ int handler(void* user, const char* section, const char* name, const char* value
     {
         cf->remove_fungal_tower_defense_bonus = (atoi(value) == 0 ? false : true);
     }
+    else if (MATCH("wtp", "aliens_fight_half_strength_unit_turn"))
+    {
+        cf->aliens_fight_half_strength_unit_turn = max(1, (atoi(value));
+    }
     else if (MATCH("wtp", "ai_useWTPAlgorithms"))
     {
         cf->ai_useWTPAlgorithms = (atoi(value) == 0 ? false : true);
@@ -412,6 +416,10 @@ int handler(void* user, const char* section, const char* name, const char* value
     else if (MATCH("wtp", "ai_production_threat_coefficient_pact"))
     {
         cf->ai_production_threat_coefficient_pact = atof(value);
+    }
+    else if (MATCH("wtp", "ai_production_threat_coefficient_human"))
+    {
+        cf->ai_production_threat_coefficient_human = atof(value);
     }
     else if (MATCH("wtp", "ai_production_min_native_protection"))
     {
@@ -472,6 +480,26 @@ int handler(void* user, const char* section, const char* name, const char* value
     else if (MATCH("wtp", "ai_production_Thinker_proportion"))
     {
         cf->ai_production_Thinker_proportion = atof(value);
+    }
+    else if (MATCH("wtp", "ai_production_vehicle_threat_power"))
+    {
+        cf->ai_production_vehicle_threat_power = max(1.0, min(2.0, atof(value)));
+    }
+    else if (MATCH("wtp", "ai_production_vehicle_threat_turns"))
+    {
+        cf->ai_production_vehicle_threat_turns = max(1.0, min(100.0, atof(value)));
+    }
+    else if (MATCH("wtp", "ai_production_protection_mix_attackers"))
+    {
+        cf->ai_production_protection_mix_attackers = max(0.0, min(1.0, atof(value)));
+    }
+    else if (MATCH("wtp", "ai_production_protection_mix_defenders"))
+    {
+        cf->ai_production_protection_mix_defenders = max(0.0, min(1.0, atof(value)));
+    }
+    else if (MATCH("wtp", "ai_production_protection_mix_artillery"))
+    {
+        cf->ai_production_protection_mix_artillery = max(0.0, min(1.0, atof(value)));
     }
     else if (MATCH("wtp", "ai_terraforming_nutrientWeight"))
     {

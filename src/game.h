@@ -287,4 +287,8 @@ bool isDiploStatus(int faction1Id, int faction2Id, int diploStatus);
 void setDiploStatus(int faction1Id, int faction2Id, int diploStatus, bool on);
 int getRemainingMinerals(int baseId);
 std::vector<int> getStackedVehicleIds(int vehicleId);
+double getMoraleCombatValueMultiplier(int morale);
+double getUnitAttackOdds(int attackingUnitId, int defendingUnitId);
+bool isUnitCanAttackDirectly(int attackingUnitId, int defendingUnitId);
+bool isPort(int baseId);
 
